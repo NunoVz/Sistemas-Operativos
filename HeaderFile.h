@@ -2,19 +2,34 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
 #include <semaphore.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/shm.h>
+#include <sys/wait.h>
+#include <pthread.h>
+#include <stdbool.h>
 
-sem_t *logMutex;   //Semáforo que será usado para controlar o acesso a um recurso compartilhado com outros processos/threads.
+sem_t *logMutex; // Semáforo que será usado para controlar o acesso a um recurso compartilhado com outros processos/threads.
 
-typedef struct sensor {
+typedef struct sensor
+{
 	char sensorId[32];
 	int sendInterval;
 	char sensorKey[32];
 	int minValue;
 	int maxValue;
-} sensor
+} sensor;
 
-sensor systemSensor;   //Inicialização da estrutura sensor.
+sensor systemSensor; // Inicialização da estrutura sensor.
 
 void initializeSemaphore();
 void printCommands();

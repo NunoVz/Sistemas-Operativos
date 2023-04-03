@@ -1,10 +1,10 @@
 CC = gcc
 FLAGS = -g -pthread -lrt -Wall
 OBJS = Functions.c HeaderFile.h
-MAIN = HomeIot.c
+MAIN = SystemManager.c
 SENSOR = Sensor.c
 USERCONSOLE = UserConsole.c
-TARGET = home_iot
+TARGET = system
 TARGET2 = sensor
 TARGET3 = user_console
 
