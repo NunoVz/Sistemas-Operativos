@@ -1,3 +1,6 @@
+#ifndef HEADER_FILE_H
+#define HEADER_FILE_H
+
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -33,3 +36,5 @@ sensor systemSensor; // Inicialização da estrutura sensor.
 
 void initializeSemaphore();
 void printCommands();
+
+#endif
