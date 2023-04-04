@@ -64,3 +64,8 @@ void printCommands()
 	printf("remove_alert [id]\n");
 	printf("list_alerts\n");
 }
+
+void add_to_queue(char *message);
+char* get_from_queue();
+
+
