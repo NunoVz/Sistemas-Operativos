@@ -20,6 +20,14 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <unistd.h>
 
 sem_t *logMutex; // Semáforo que será usado para controlar o acesso a um recurso compartilhado com outros processos/threads.
 
@@ -33,6 +41,7 @@ typedef struct sensor
 } sensor;
 
 sensor systemSensor; // Inicialização da estrutura sensor.
+SharedMemory shm ;
 
 void initializeSemaphore();
 void printCommands();

@@ -1,6 +1,7 @@
 #include "HeaderFile.h"
 
 #define MAX_QUEUE_SIZE 100
+#define SEM_KEY 1234
 
 sem_t queue_sem; // semaphore to ensure exclusive access to the internal queue
 
@@ -13,6 +14,94 @@ int nworkers;
 int maxkeys;
 int maxsensors;
 int maxalerts;
+
+
+
+
+typedef struct {
+    int value;
+    int semid;
+    int shmid;
+    char *shmaddr;
+} SharedMemory;
+
+int create_sem(int key) {
+    int semid = semget(key, 1, IPC_CREAT | 0666);
+    if (semid < 0) {
+        perror("semget");
+        exit(1);
+    }
+    semctl(semid, 0, SETVAL, 1);
+    return semid;
+}
+
+int create_shm(int size) {
+    int shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | 0666);
+    if (shmid < 0) {
+        perror("shmget");
+        exit(1);
+    }
+    return shmid;
+}
+
+char *attach_shm(int shmid) {
+    char *shmaddr = shmat(shmid, NULL, 0);
+    if (shmaddr == (char *) -1) {
+        perror("shmat");
+        exit(1);
+    }
+    return shmaddr;
+}
+
+void detach_shm(char *shmaddr) {
+    shmdt(shmaddr);
+}
+
+void destroy_sem(int semid) {
+    semctl(semid, 0, IPC_RMID);
+}
+
+void destroy_shm(int shmid) {
+    shmctl(shmid, IPC_RMID, NULL);
+}
+
+SharedMemory create_shared_memory(int size) {
+    SharedMemory shm;
+    shm.shmid = create_shm(size);
+    shm.shmaddr = attach_shm(shm.shmid);
+    shm.semid = create_sem(SEM_KEY);
+    return shm;
+}
+
+void destroy_shared_memory(SharedMemory *shm) {
+    destroy_sem(shm->semid);
+    detach_shm(shm->shmaddr);
+    destroy_shm(shm->shmid);
+}
+
+void lock_shared_memory(SharedMemory *shm) {
+    struct sembuf sops = {0, -1, SEM_UNDO};
+    semop(shm->semid, &sops, 1);
+}
+
+void unlock_shared_memory(SharedMemory *shm) {
+    struct sembuf sops = {0, 1, SEM_UNDO};
+    semop(shm->semid, &sops, 1);
+}
+
+void write_shared_memory(SharedMemory *shm, int value) {
+    lock_shared_memory(shm);
+    shm->value = value;
+    unlock_shared_memory(shm);
+}
+
+int read_shared_memory(SharedMemory *shm) {
+    int value;
+    lock_shared_memory(shm);
+    value = shm->value;
+    unlock_shared_memory(shm);
+    return value;
+}
 
 void add_to_queue(char *message)
 {
@@ -191,6 +280,7 @@ void worker()
 void alert()
 {
     	writelog("ALERT WATCHER UP!");
+  
 
         exit(0);
 
@@ -204,6 +294,9 @@ int main(int argc, char *argv[])
 	}
 	init_log();
 	initializeSemaphore();
+    shm = create_shared_memory(sizeof(int));
+    write_shared_memory(&shm, 42);
+    writelog("SHARED MEMORY INTIALIZED")
     read_conf(argv[1]);
     
 
@@ -231,6 +324,8 @@ int main(int argc, char *argv[])
     pthread_join(ConsoleReaderID, NULL); // wait for the threads to finish
     pthread_join(SensorReaderID, NULL);
     pthread_join(DispatcherID, NULL);
+    destroy_shared_memory(&shm);
+
 
 
 	return 0;
