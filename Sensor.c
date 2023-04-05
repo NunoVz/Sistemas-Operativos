@@ -1,6 +1,6 @@
 #include "HeaderFile.h"
 
-#define FIFO_NAME "/tmp/consolefifo" // name of the named pipe
+#define FIFO_NAME "/tmp/sensorfifo" // name of the named pipe
 
 int main(int argc, char *argv[])
 {

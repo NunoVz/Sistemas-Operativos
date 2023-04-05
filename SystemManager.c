@@ -1,13 +1,11 @@
 #include "HeaderFile.h"
 
-#define MAX_QUEUE_SIZE 100
 #define SEM_KEY 1234
 
-sem_t queue_sem; // semaphore to ensure exclusive access to the internal queue
-
-char internal_queue[MAX_QUEUE_SIZE][100]; // internal queue to store received messages
-int queue_front = 0; // index of the front of the queue
-int queue_back = 0; // index of the back of the queue
+sem_t queue_sem; // Sem da queue interna
+mqd_t mq;
+int queue_front = 0;
+int queue_back = 0; 
 
 int queusize;
 int nworkers;
@@ -15,15 +13,14 @@ int maxkeys;
 int maxsensors;
 int maxalerts;
 
+int (*worker_pipes)[2];   //worker_pipes
+char (*internal_queue)[100]; //internalqueue
+
+mqd_t mq;
 
 
 
-typedef struct {
-    int value;
-    int semid;
-    int shmid;
-    char *shmaddr;
-} SharedMemory;
+
 
 int create_sem(int key) {
     int semid = semget(key, 1, IPC_CREAT | 0666);
@@ -109,7 +106,7 @@ void add_to_queue(char *message)
 
     // add the message to the back of the queue
     strncpy(internal_queue[queue_back], message, sizeof(internal_queue[queue_back]));
-    queue_back = (queue_back + 1) % MAX_QUEUE_SIZE;
+    queue_back = (queue_back + 1) % queusize;
 
     sem_post(&queue_sem); // release access to the internal queue
 }
@@ -123,7 +120,7 @@ char* getqueue()
     // check if the queue is empty
     if (queue_front != queue_back) {
         message = internal_queue[queue_front];
-        queue_front = (queue_front + 1) % MAX_QUEUE_SIZE;
+        queue_front = (queue_front + 1) % queusize;
     }
 
     sem_post(&queue_sem); // release access to the internal queue
@@ -160,14 +157,15 @@ void *dispatcher_thread(void *arg)
     writelog("THREAD dispatcher READER UP!");
 
     while (true) {
-        message = getqueue(); // get a message from the internal queue
+        message = getqueue();
 
-        if (message != NULL) { // if a message was retrieved
-            // process the message (replace with your own processing code)
+        if (message != NULL) { 
             printf("Dispatcher thread received message: %s\n", message);
+            int worker_id = strlen(message) % nworkers;
+            write(worker_pipes[worker_id][1], message, strlen(message) + 1);
         }
 
-        usleep(100); // sleep for a short time to avoid busy-waiting
+        usleep(100); 
     }
 }
 int read_conf(char *filename)
@@ -260,7 +258,7 @@ int read_conf(char *filename)
         free(line);
     return 1;
 }
-void create_proc(void (*function)(), void *arg)
+void create_proc(void (*function)(void*), void *arg)
 {
     if (fork() == 0)
     {
@@ -268,13 +266,30 @@ void create_proc(void (*function)(), void *arg)
         if (arg)
             function(arg);
         else
-            function();
+            function(NULL);
     }
 }
-void worker()
+
+
+void worker(void* arg)
 {
-    	writelog("WORKER UP!");
-        exit(0);
+    int worker_id = *((int*) arg);
+    free(arg); 
+    writelog("WORKER UP!");
+
+    char message[100];
+
+    while(1) {
+        read(worker_pipes[worker_id][0], &message, sizeof(message));
+
+        printf("Worker %d received message: %s\n", worker_id, message);
+        struct queuemsg my_msg;
+        my_msg.mtype = 1; // Set the message type to 1
+        strcpy(my_msg.mtext, "[QUEUE] Hello, world!");
+        mq_send(mq, (char *) &my_msg, MAX_MSG_SIZE, 0);
+
+    }
+
 
 }
 void alert()
@@ -296,8 +311,12 @@ int main(int argc, char *argv[])
 	initializeSemaphore();
     shm = create_shared_memory(sizeof(int));
     write_shared_memory(&shm, 42);
-    writelog("SHARED MEMORY INTIALIZED")
+    writelog("SHARED MEMORY INTIALIZED");
     read_conf(argv[1]);
+    worker_pipes = malloc(sizeof(int[nworkers][2]));
+    internal_queue = malloc(sizeof(char[queusize][100]));
+    mq = create_queue(); 
+
     
 
 	writelog("SYSTEM MANAGER UP!");
@@ -307,9 +326,18 @@ int main(int argc, char *argv[])
     bool readSensor = false;
     sem_init(&queue_sem, 0, 1);
 
+     for(int i = 0; i < nworkers; i++) {
+        if(pipe(worker_pipes[i]) < 0) {
+            perror("Error creating pipe");
+            exit(1);
+        }
+    }
+
      for (int i = 0; i < nworkers; i++)
     {
-        create_proc(worker, NULL);
+        int* worker_id = malloc(sizeof(int));
+        *worker_id = i;
+        create_proc(worker, worker_id);
     }
 
     create_proc(alert,NULL);
@@ -321,7 +349,7 @@ int main(int argc, char *argv[])
 
    
 
-    pthread_join(ConsoleReaderID, NULL); // wait for the threads to finish
+    pthread_join(ConsoleReaderID, NULL);
     pthread_join(SensorReaderID, NULL);
     pthread_join(DispatcherID, NULL);
     destroy_shared_memory(&shm);
