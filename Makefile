@@ -11,9 +11,9 @@ TARGET3 = user_console
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-		$(CC) $(FLAGS) $(MAIN) $(OBJS) -o $(TARGET)
-		$(CC) $(FLAGS) $(SENSOR) $(OBJS) -o $(TARGET2)
-		$(CC) $(FLAGS) $(USERCONSOLE) $(OBJS) -o $(TARGET3)
+		$(CC) $(FLAGS) $(MAIN) $(OBJS) -o $(TARGET) -lrt
+		$(CC) $(FLAGS) $(SENSOR) $(OBJS) -o $(TARGET2) -lrt
+		$(CC) $(FLAGS) $(USERCONSOLE) $(OBJS) -o $(TARGET3) -lrt
 		
 clean:
 				$(RM) $(TARGET)

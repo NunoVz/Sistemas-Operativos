@@ -4,6 +4,7 @@
 sem_t *mutex;
 FILE *log_file;
 
+
 void initializeSemaphore()
 {
 	sem_unlink("MUTEX");
@@ -67,5 +68,21 @@ void printCommands()
 
 void add_to_queue(char *message);
 char* get_from_queue();
+
+
+
+mqd_t create_queue() {
+    struct mq_attr attr;
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = MAX_MESSAGES;
+    attr.mq_msgsize = MAX_MSG_SIZE;
+    attr.mq_curmsgs = 0;
+    mqd_t mq = mq_open(QUEUE_NAME, O_CREAT | O_RDWR, QUEUE_PERMISSIONS, &attr);
+    if (mq == -1) {
+        perror("mq_open");
+        exit(1);
+    }
+    return mq;
+}
 
 
