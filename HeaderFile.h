@@ -50,20 +50,56 @@ struct queuemsg {
 };
 
 sem_t *logMutex; // Semáforo que será usado para controlar o acesso a um recurso compartilhado com outros processos/threads.
+int queusize;
+int nworkers;
+int maxkeys;
+int maxsensors;
+int maxalerts;
 
-typedef struct sensor
+typedef struct something
 {
 	char sensorId[32];
 	int sendInterval;
 	char sensorKey[32];
 	int minValue;
 	int maxValue;
-} sensor;
+} something;
 
-sensor systemSensor; // Inicialização da estrutura sensor.
+something systemSensor; // Inicialização da estrutura sensor.
+
+typedef struct keyStats
+{
+	char key[32];
+    int last;
+	int minValue;
+	int maxValue;
+    int avg;
+    int count;
+    struct keyStats *next;
+} keyStats;
+typedef struct sensor
+{
+	char sensorId[32];
+    struct sensor *next;
+
+ 
+} sensor;
+typedef struct alertStruct
+{
+	char id[32];
+	char key[32];
+	int minValue;
+	int maxValue;
+    struct alertStruct *next;
+
+ 
+} alertStruct;
+
 
 typedef struct {
-    int value;
+    alertStruct *alertList;
+    keyStats *keystatsList;
+    sensor *sensorList;
     int semid;
     int shmid;
     char *shmaddr;
