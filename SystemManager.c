@@ -394,6 +394,109 @@ void printSensors(SharedMemory *shm) {
 
 }
 
+
+void addAlertToList(char* id, char* key, int minValue, int maxValue, SharedMemory* shm) {
+    lock_shared_memory(shm);
+    alertStruct *currentNode = shm->alertList;
+    while (currentNode != NULL) {
+        if (strcmp(currentNode->id, id) == 0) {
+            printf("Error: Alert with ID %s already exists.\n", id);
+            unlock_shared_memory(shm);
+            return;
+        }
+        currentNode = currentNode->next;
+    }
+
+    // Create a new alertStruct node and initialize its fields
+    alertStruct *alertNode = malloc(sizeof(alertStruct));
+    strcpy(alertNode->id, id);
+    strcpy(alertNode->key, key);
+    alertNode->minValue = minValue;
+    alertNode->maxValue = maxValue;
+    alertNode->next = NULL;
+
+    // If the alertList is empty, set the alertNode as the head
+    if (shm->alertList == NULL) {
+        shm->alertList = alertNode;
+        unlock_shared_memory(shm);
+        return;
+    }
+
+    // Traverse the list to find the end
+    currentNode = shm->alertList;
+    while (currentNode->next != NULL) {
+        currentNode = currentNode->next;
+    }
+
+    // Add the alertNode to the end of the list
+    currentNode->next = alertNode;
+    unlock_shared_memory(shm);
+
+}
+
+
+
+
+void deleteAlertFromList(char *id, SharedMemory *shm) {
+    lock_shared_memory(shm);
+
+    if (shm->alertList == NULL) {
+        unlock_shared_memory(shm);
+        return;
+    }
+
+    if (strcmp(shm->alertList->id, id) == 0) {
+        alertStruct *temp = shm->alertList;
+        shm->alertList = shm->alertList->next;
+        free(temp);
+        unlock_shared_memory(shm);
+        return;
+    }
+
+    alertStruct *currentNode = shm->alertList;
+    while (currentNode->next != NULL && strcmp(currentNode->next->id, id) != 0) {
+        currentNode = currentNode->next;
+    }
+
+    if (currentNode->next == NULL) {
+        unlock_shared_memory(shm);
+        return;
+    }
+
+    alertStruct *temp = currentNode->next;
+    currentNode->next = currentNode->next->next;
+    free(temp);
+    unlock_shared_memory(shm);
+
+}
+
+
+
+
+void printAlerts(SharedMemory *shm) {
+
+    lock_shared_memory(shm);
+
+    alertStruct *k = shm->alertList;
+
+    printf("ID\t| KEY\t| MINVALUE\t| MAXVALUE\t|\n");
+
+    printf("-----------------------------------------------------------\n");
+
+    while (k != NULL) {
+
+        printf("%s\t| %s\t| %d\t\t| %d\t\t|\n", k->id, k->key, k->minValue, k->maxValue);
+
+        k = k->next;
+
+    }
+    printf("-----------------------------------------------------------\n");
+
+
+    unlock_shared_memory(shm);
+
+}
+
 void worker(void* arg)
 {
     SharedMemory* shm_ptr = &shm;
@@ -408,6 +511,8 @@ void worker(void* arg)
         if (message[strlen(message) - 1] == '\n') {
             message[strlen(message) - 1] = '\0';
         }
+        char msg_copy[100];
+        strcpy(msg_copy, message);
         char *word = strtok(message, " ");
         printf("Worker %d received message: %s\n", worker_id, message);
 
@@ -429,10 +534,27 @@ void worker(void* arg)
             printSensors(shm_ptr);
             printf("Sensors command detected\n");
         } else if (strcmp(word, "add_alert") == 0) {
+            char command[20], id[20], key[20];
+            int min, max;
+            //Checka se tem os params corretos
+            printf("Mess: %s\n",message);
+
+            if (sscanf(msg_copy, "%s %s %s %d %d", command, id, key, &min, &max) == 5) {
+                addAlertToList(id,key,min,max,shm_ptr);
+            } else {
+                printf("Invalid input format for add_alert\n");
+            }
             printf("Add alert command detected\n");
         } else if (strcmp(word, "remove_alert") == 0) {
+            char command[20], id[20];
+            if (sscanf(msg_copy, "%s %s", command, id) == 2) {
+                deleteAlertFromList(id,shm_ptr);
+            } else {
+                printf("Invalid input format for add_alert\n");
+            }
             printf("Remove alert command detected\n");
         } else if (strcmp(word, "list_alerts") == 0) {
+            printAlerts(shm_ptr);
             printf("List alerts command detected\n");
         } else {
             char *sensor_id, *key, *value;
@@ -444,7 +566,6 @@ void worker(void* arg)
                 }
             }
             if (count == 2) {
-                // Split the message into its components
                 sensor_id = strtok(message, "#");
                 key = strtok(NULL, "#");
                 value = strtok(NULL, "#");
@@ -459,9 +580,9 @@ void worker(void* arg)
             }
         }
 
-        
+        //Isto é para mandar pro user dps, o mtype é o valor do identificador da consola do user
         struct queuemsg my_msg;
-        my_msg.mtype = 1; // Set the message type to 1
+        my_msg.mtype = 1; 
         strcpy(my_msg.mtext, "[QUEUE] Hello, world!");
         mq_send(mq, (char *) &my_msg, MAX_MSG_SIZE, 0);
 
