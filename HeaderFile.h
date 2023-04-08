@@ -100,12 +100,20 @@ typedef struct {
     alertStruct *alertList;
     keyStats *keystatsList;
     sensor *sensorList;
+    int semwork[5];
     int semid;
     int shmid;
     char *shmaddr;
 } SharedMemory;
 
-SharedMemory shm ;
+
+SharedMemory* shm_ptr;
+
+typedef struct worker {
+    int i;
+    int status;
+    struct worker* next;
+} worker_t;
 
 void initializeSemaphore();
 void printCommands();
