@@ -75,6 +75,7 @@ mqd_t create_queue() {
     struct mq_attr attr;
     attr.mq_flags = 0;
     attr.mq_maxmsg = MAX_MESSAGES;
+	//Meter este size a vir das configs
     attr.mq_msgsize = MAX_MSG_SIZE;
     attr.mq_curmsgs = 0;
     mqd_t mq = mq_open(QUEUE_NAME, O_CREAT | O_RDWR, QUEUE_PERMISSIONS, &attr);

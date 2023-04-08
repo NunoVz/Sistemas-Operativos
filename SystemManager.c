@@ -12,7 +12,6 @@ int queue_back = 0;
 int (*worker_pipes)[2];   //worker_pipes
 char (*internal_queue)[100]; //internalqueue
 
-mqd_t mq;
 
 
 
@@ -58,15 +57,51 @@ void destroy_shm(int shmid) {
     shmctl(shmid, IPC_RMID, NULL);
 }
 
-SharedMemory create_shared_memory(int size) {
-    SharedMemory shmq;
-    shmq.shmid = create_shm(size);
-    shmq.shmaddr = attach_shm(shmq.shmid);
-    shmq.semid = create_sem(SEM_KEY);
-    memset(shmq.shmaddr, 0, size); // Initialize shared memory to 0
-    shmq.keystatsList= NULL;
-    shmq.sensorList = NULL;
-    shmq.alertList = NULL;
+SharedMemory* create_shared_memory(int nworkers) {
+    size_t size = sizeof(SharedMemory) + nworkers * sizeof(int); // Allocate space for FAM
+    SharedMemory* shmq = malloc(size);
+
+    if (shmq == NULL) {
+        perror("Failed to allocate memory for shared memory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Initialize the rest of the struct
+    shmq->shmid = create_shm(size - sizeof(int) * nworkers); // Subtract FAM size from shared memory size
+    shmq->shmaddr = attach_shm(shmq->shmid);
+    shmq->semid = create_sem(SEM_KEY);
+    memset(shmq->shmaddr, 0, size - sizeof(int) * nworkers);
+    shmq->keystatsList = NULL;
+    shmq->sensorList = NULL;
+    shmq->alertList = NULL;
+
+    // Initialize the FAM
+    for (int i = 0; i < nworkers; i++) {
+        int semwork = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
+
+        if (semwork < 0) {
+            perror("semget() failed");
+            exit(EXIT_FAILURE);
+        }
+
+        if (semctl(semwork, 0, SETVAL, 1) < 0) { // set the initial value to 1
+            perror("semctl() failed");
+            exit(EXIT_FAILURE);
+        }
+
+        struct sembuf sb = {0, -1, SEM_UNDO};
+        semop(semwork, &sb, 1);
+
+        shmq->semwork[i] = semwork;
+
+        int semval = semctl(semwork, 0, GETVAL); // get the current value of the semaphore
+        if (semval < 0) {
+            perror("semctl() failed");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("Semaphore %d value: %d\n", semwork, semval);
+    }
 
     return shmq;
 }
@@ -77,15 +112,20 @@ void destroy_shared_memory(SharedMemory *shm) {
     destroy_shm(shm->shmid);
 }
 
-void lock_shared_memory(SharedMemory *shm) {
+void lock_shared_memory() {
     struct sembuf sops = {0, -1, SEM_UNDO};
-    semop(shm->semid, &sops, 1);
+    semop(shm_ptr->semid, &sops, 1);
 }
 
-void unlock_shared_memory(SharedMemory *shm) {
+void unlock_shared_memory() {
     struct sembuf sops = {0, 1, SEM_UNDO};
-    semop(shm->semid, &sops, 1);
+    semop(shm_ptr->semid, &sops, 1);
 }
+
+
+
+
+
 
 
 
@@ -146,17 +186,46 @@ void *dispatcher_thread(void *arg)
     char *message;
     writelog("THREAD dispatcher READER UP!");
 
+
     while (true) {
         message = getqueue();
 
-        if (message != NULL) { 
+        if (message != NULL) {
             printf("Dispatcher thread received message: %s\n", message);
-            int worker_id = strlen(message) % nworkers;
-            worker_id=0;
-            write(worker_pipes[worker_id][1], message, strlen(message) + 1);
+
+            // Traverse the worker list to find an available worker
+            bool flagw=true;
+            while(flagw){
+                for (int i = 0; i < nworkers; i++) {
+                    // Get the current value of the semaphore associated with this worker
+                    lock_shared_memory();
+                    int semval = semctl(shm_ptr->semwork[i], 0, GETVAL);
+                    unlock_shared_memory();
+                    if (semval == 0 && worker_pipes[i][0] != -1) {
+
+                        write(worker_pipes[i][1], message, strlen(message) + 1);
+
+                        printf("Message sent to worker %d\n", i);
+
+                        flagw = false;
+                        break;
+                    }
+                }
+                    
+                
+                if(flagw==true){
+                    printf("Nenhum worker disponivel vamos percorrer outra vez....\n");
+                }
+            }
+            
+            
+        
+      
+
+            
         }
 
-        usleep(100); 
+        usleep(100); // Wait a bit before checking for new messages
     }
 }
 int read_conf(char *filename)
@@ -168,7 +237,6 @@ int read_conf(char *filename)
     int line_id = 0;
     int number;
 
-    char *token;
     if ((config = fopen(filename, "r")) == NULL)
     {
         writelog("[SYSTEM] Failed to open config file");
@@ -230,7 +298,7 @@ int read_conf(char *filename)
         case (4):
             number = atoi(line);
 
-           if (number < 1)
+           if (number < 0)
             {
                 writelog("[SYSTEM] Number of max alerts is too low");
 
@@ -260,33 +328,78 @@ void create_proc(void (*function)(void*), void *arg)
             function(NULL);
     }
 }
+bool getlistsizes(int x){
+    //X is 0 checks size of alert size
+    //X is 1 checks size of keystatsList
+    //X is 2 checks size of sensorList
+    int size = 0;
 
+    if(x==0){
+        alertStruct *currentNode = shm_ptr->alertList;
+        while (currentNode != NULL) {
+            size++;
+            currentNode = currentNode->next;
+        }
+        if(size>=maxalerts){
+            return false;
+        }
+        return true;
+    }else if(x==1){
+        keyStats *currentNode = shm_ptr->keystatsList;
+        while (currentNode != NULL) {
+            size++;
+            currentNode = currentNode->next;
+        }
+        if(size>=maxkeys){
+            return false;
+        }
+        return true;
+
+    }else if(x==2){
+        sensor *currentNode = shm_ptr->sensorList;
+        while (currentNode != NULL) {
+            size++;
+            currentNode = currentNode->next;
+        }
+        if(size>=maxsensors){
+            return false;
+        }
+        return true;
+
+    }else{
+        return false;
+    }
+
+}
 int addSensor(SharedMemory *shm, const char *sensorId) {
     // Check if sensorId already exists
     lock_shared_memory(shm);
+    if(!getlistsizes(2)){
+        writelog("Couldnt add new sensor");
+    }else{
+        sensor *s = shm->sensorList;
+        while (s != NULL) {
+            if (strcmp(s->sensorId, sensorId) == 0) {
+                // Sensor already exists, return failure
+                unlock_shared_memory(shm);
 
-    sensor *s = shm->sensorList;
-    while (s != NULL) {
-        if (strcmp(s->sensorId, sensorId) == 0) {
-            // Sensor already exists, return failure
-            unlock_shared_memory(shm);
-
-            return -1;
+                return -1;
+            }
+            if (s->next == NULL) {
+                break;
+            }
+            s = s->next;
         }
-        if (s->next == NULL) {
-            break;
-        }
-        s = s->next;
-    }
 
-    // Sensor doesn't exist, add new sensor to the list
-    sensor *newSensor = (sensor *)malloc(sizeof(sensor));
-    strcpy(newSensor->sensorId, sensorId);
-    newSensor->next = NULL;
-    if (s == NULL) {
-        shm->sensorList = newSensor;
-    } else {
-        s->next = newSensor;
+        // Sensor doesn't exist, add new sensor to the list
+        sensor *newSensor = (sensor *)malloc(sizeof(sensor));
+        strcpy(newSensor->sensorId, sensorId);
+        newSensor->next = NULL;
+        if (s == NULL) {
+            shm->sensorList = newSensor;
+        } else {
+            s->next = newSensor;
+        }
     }
     unlock_shared_memory(shm);
 
@@ -296,7 +409,7 @@ int addSensor(SharedMemory *shm, const char *sensorId) {
 // Function to add a new keystats to the shared memory
 int addKeystats(SharedMemory *shm, char *key, int value) {
     lock_shared_memory(shm);
-
+    
     // Check if keystats with the same key already exists
     keyStats *k = shm->keystatsList;
 
@@ -322,24 +435,28 @@ int addKeystats(SharedMemory *shm, char *key, int value) {
         k = k->next;
     }
 
-    // Keystats doesn't exist, add new keystats to the list
-    keyStats *newKeystats = (keyStats *) malloc(sizeof(keyStats));
-    printf("%d",value);
-    strcpy(newKeystats->key, key);
-    newKeystats->last = value;
-    newKeystats->minValue = value;
-    newKeystats->maxValue = value;
-    newKeystats->count = 1;
-    newKeystats->avg = ((newKeystats->avg * (newKeystats->count - 1)) + value) / newKeystats->count;;
-    newKeystats->next = NULL;
+    if(!getlistsizes(1)){
+            writelog("Couldnt add new key");
+    }else{
+        // Keystats doesn't exist, add new keystats to the list
+        keyStats *newKeystats = (keyStats *) malloc(sizeof(keyStats));
+        printf("%d",value);
+        strcpy(newKeystats->key, key);
+        newKeystats->last = value;
+        newKeystats->minValue = value;
+        newKeystats->maxValue = value;
+        newKeystats->count = 1;
+        newKeystats->avg = ((newKeystats->avg * (newKeystats->count - 1)) + value) / newKeystats->count;;
+        newKeystats->next = NULL;
 
 
-    if (k == NULL) {
-        // The list is empty
-        shm->keystatsList = newKeystats;
-    } else {
-        // Add newKeystats to the end of the list
-        k->next = newKeystats;
+        if (k == NULL) {
+            // The list is empty
+            shm->keystatsList = newKeystats;
+        } else {
+            // Add newKeystats to the end of the list
+            k->next = newKeystats;
+        }
     }
     unlock_shared_memory(shm);
 
@@ -397,6 +514,7 @@ void printSensors(SharedMemory *shm) {
 
 void addAlertToList(char* id, char* key, int minValue, int maxValue, SharedMemory* shm) {
     lock_shared_memory(shm);
+    
     alertStruct *currentNode = shm->alertList;
     while (currentNode != NULL) {
         if (strcmp(currentNode->id, id) == 0) {
@@ -406,30 +524,33 @@ void addAlertToList(char* id, char* key, int minValue, int maxValue, SharedMemor
         }
         currentNode = currentNode->next;
     }
+    if(!getlistsizes(0)){
+            writelog("Couldnt add new Alert");
+    }else{
+        // Create a new alertStruct node and initialize its fields
+        alertStruct *alertNode = malloc(sizeof(alertStruct));
+        strcpy(alertNode->id, id);
+        strcpy(alertNode->key, key);
+        alertNode->minValue = minValue;
+        alertNode->maxValue = maxValue;
+        alertNode->next = NULL;
 
-    // Create a new alertStruct node and initialize its fields
-    alertStruct *alertNode = malloc(sizeof(alertStruct));
-    strcpy(alertNode->id, id);
-    strcpy(alertNode->key, key);
-    alertNode->minValue = minValue;
-    alertNode->maxValue = maxValue;
-    alertNode->next = NULL;
+        // If the alertList is empty, set the alertNode as the head
+        if (shm->alertList == NULL) {
+            shm->alertList = alertNode;
+            unlock_shared_memory(shm);
+            return;
+        }
 
-    // If the alertList is empty, set the alertNode as the head
-    if (shm->alertList == NULL) {
-        shm->alertList = alertNode;
-        unlock_shared_memory(shm);
-        return;
+        // Traverse the list to find the end
+        currentNode = shm->alertList;
+        while (currentNode->next != NULL) {
+            currentNode = currentNode->next;
+        }
+
+        // Add the alertNode to the end of the list
+        currentNode->next = alertNode;
     }
-
-    // Traverse the list to find the end
-    currentNode = shm->alertList;
-    while (currentNode->next != NULL) {
-        currentNode = currentNode->next;
-    }
-
-    // Add the alertNode to the end of the list
-    currentNode->next = alertNode;
     unlock_shared_memory(shm);
 
 }
@@ -499,15 +620,36 @@ void printAlerts(SharedMemory *shm) {
 
 void worker(void* arg)
 {
-    SharedMemory* shm_ptr = &shm;
-    int worker_id = *((int*) arg);
+    worker_t worker = *((worker_t*) arg);
+    int worker_id= worker.i;
     free(arg); 
     writelog("WORKER UP!");
+    printf("WORKER UP %d\n",worker_id);
+
+
+
 
     char message[100];
+   
 
     while(1) {
+
         read(worker_pipes[worker_id][0], &message, sizeof(message));
+
+        struct sembuf sb = {0, 0, SEM_UNDO}; // Check semaphore value
+        lock_shared_memory();
+        int semval = semctl(shm_ptr->semwork[worker_id], 0, GETVAL); // Get current semaphore value
+        if (semval == 0) {
+            sb.sem_op = 1; // Increment semaphore value by 1
+            if (semop(shm_ptr->semwork[worker_id], &sb, 1) < 0) { // Lock semaphore
+                perror("semop() failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+        unlock_shared_memory();
+
+        printf("\nWorker: %d BUSY\n",worker_id);
+
         if (message[strlen(message) - 1] == '\n') {
             message[strlen(message) - 1] = '\0';
         }
@@ -520,7 +662,7 @@ void worker(void* arg)
             printKeystatsList(shm_ptr);
             printf("Stats command detected\n");
         } else if (strcmp(word, "reset") == 0) {
-            lock_shared_memory(shm_ptr);
+            lock_shared_memory();
             keyStats *curr = shm_ptr->keystatsList;
             while (curr != NULL) {
                 keyStats *temp = curr;
@@ -528,7 +670,7 @@ void worker(void* arg)
                 free(temp);
             }
             shm_ptr->keystatsList = NULL;
-            unlock_shared_memory(shm_ptr);
+            unlock_shared_memory();
             printf("Reset command detected\n");
         } else if (strcmp(word, "sensors") == 0) {
             printSensors(shm_ptr);
@@ -580,12 +722,24 @@ void worker(void* arg)
             }
         }
 
-        //Isto é para mandar pro user dps, o mtype é o valor do identificador da consola do user
+        
+        sleep(5);
+        struct sembuf sbt = {0, -1, SEM_UNDO}; // Decrement semaphore value by 1
+        lock_shared_memory();
+        if (semop(shm_ptr->semwork[worker_id], &sbt, 1) < 0) { // Unlock semaphore
+            perror("semop() failed");
+            exit(EXIT_FAILURE);
+        }
+        unlock_shared_memory();
         struct queuemsg my_msg;
         my_msg.mtype = 1; 
         strcpy(my_msg.mtext, "[QUEUE] Hello, world!");
         mq_send(mq, (char *) &my_msg, MAX_MSG_SIZE, 0);
 
+
+
+
+    
     }
 
 
@@ -599,17 +753,19 @@ void alert()
 
 }
 
+
+
 int main(int argc, char *argv[])
 {
-	if (argc != 2)
-	{
-		fprintf(stderr, "system {ficheiro de configuração}");
-	}
-	init_log();
-	initializeSemaphore();
-    shm = create_shared_memory(sizeof(int));
-    writelog("SHARED MEMORY INTIALIZED");
+	if (argc != 2) {
+        fprintf(stderr, "system {ficheiro de configuração}");
+    }
+    init_log();
     read_conf(argv[1]);
+    initializeSemaphore();
+    shm_ptr = create_shared_memory(sizeof(int));
+
+    writelog("SHARED MEMORY INTIALIZED");
     worker_pipes = malloc(sizeof(int[nworkers][2]));
     internal_queue = malloc(sizeof(char[queusize][100]));
     mq = create_queue(); 
@@ -630,15 +786,20 @@ int main(int argc, char *argv[])
         }
     }
 
-
-     for (int i = 0; i < nworkers; i++)
+    worker_t* current = NULL;
+    for (int i = 0; i < nworkers; i++)
     {
-        int* worker_id = malloc(sizeof(int));
-        *worker_id = i;
-        create_proc(worker, worker_id);
+        worker_t* new_worker = (worker_t*) malloc(sizeof(worker_t));
+        new_worker->i = i;
+        new_worker->status = true;
+        new_worker->next = NULL;
+
+        create_proc(worker, new_worker);
     }
 
     create_proc(alert,NULL);
+
+
 
     
     pthread_create(&ConsoleReaderID, NULL, read_thread, (void *)&readConsole);
@@ -650,7 +811,7 @@ int main(int argc, char *argv[])
     pthread_join(ConsoleReaderID, NULL);
     pthread_join(SensorReaderID, NULL);
     pthread_join(DispatcherID, NULL);
-    destroy_shared_memory(&shm);
+    destroy_shared_memory(shm_ptr);
 
 
 

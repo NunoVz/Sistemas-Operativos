@@ -27,10 +27,16 @@ int main(int argc, char *argv[])
 
 	fd = open(FIFO_NAME, O_WRONLY); // open the named pipe for writing
 
+	srand(time(NULL));
+
 	while(true){
-		char input[]="Mensagem toda randolas do sensor";
+		
+        char input[100];
+
+		int value =  systemSensor.minValue + ((float) rand() / RAND_MAX) * (systemSensor.maxValue  - systemSensor.minValue);
+		snprintf(input, sizeof(input), "%s#%s#%d", systemSensor.sensorId, systemSensor.sensorKey, value);
 		write(fd, input, strlen(input) + 1);
-		sleep(3);
+		sleep(systemSensor.sendInterval);
 	}
 	close(fd);
 
