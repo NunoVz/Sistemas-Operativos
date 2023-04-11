@@ -1,11 +1,14 @@
-19:48:04  SHARED MEMORY INTIALIZED
-19:48:04  SYSTEM MANAGER UP!
-19:48:04  WORKER UP!
-19:48:04  WORKER UP!
-19:48:04  WORKER UP!
-19:48:04  WORKER UP!
-19:48:04  WORKER UP!
-19:48:04  THREAD CONSOLE READER UP!
-19:48:04  THREAD SENSOR READER UP!
-19:48:04  THREAD dispatcher READER UP!
-19:48:04  ALERT WATCHER UP!
+05:00:23  [SYSTEM] Number of max queue size is too low
+05:00:31  [SYSTEM] Number of max workers is too low
+05:00:39  [SYSTEM] Number of max keys is too low
+05:00:45  [SYSTEM] Number of max sensores is too low
+05:00:57  SHARED MEMORY INTIALIZED
+05:00:57  SYSTEM MANAGER UP!
+05:00:57  ALERT WATCHER UP!
+05:00:57  WORKER UP!
+05:00:57  THREAD dispatcher READER UP!
+05:00:57  THREAD CONSOLE READER UP!
+05:00:57  THREAD SENSOR READER UP!
+05:01:04  [SYSTEM] ConfigFile does not have enought information!
+05:01:09  [SYSTEM] ConfigFile does not have enought information!
+05:01:30  [SYSTEM] Number of max sensores is too low

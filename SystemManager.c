@@ -100,7 +100,6 @@ SharedMemory* create_shared_memory(int nworkers) {
             exit(EXIT_FAILURE);
         }
 
-        printf("Semaphore %d value: %d\n", semwork, semval);
     }
 
     return shmq;
@@ -244,7 +243,9 @@ int read_conf(char *filename)
     }
     while ((read = getline(&line, &len, config)) != -1)
     {
-
+        if(strlen(line)==2){
+            break;
+        }
         switch (line_id)
         {
         case (0):
@@ -297,7 +298,8 @@ int read_conf(char *filename)
         
         case (4):
             number = atoi(line);
-
+            printf("teste: %s   tes", line);
+            fflush(stdout);
            if (number < 0)
             {
                 writelog("[SYSTEM] Number of max alerts is too low");
@@ -315,6 +317,10 @@ int read_conf(char *filename)
     fclose(config);
     if (line)
         free(line);
+    if(line_id <5){
+        writelog("[SYSTEM] ConfigFile does not have enought information!");
+        exit(1);
+    }
     return 1;
 }
 void create_proc(void (*function)(void*), void *arg)
@@ -723,7 +729,6 @@ void worker(void* arg)
         }
 
         
-        sleep(5);
         struct sembuf sbt = {0, -1, SEM_UNDO}; // Decrement semaphore value by 1
         lock_shared_memory();
         if (semop(shm_ptr->semwork[worker_id], &sbt, 1) < 0) { // Unlock semaphore
@@ -759,10 +764,14 @@ int main(int argc, char *argv[])
 {
 	if (argc != 2) {
         fprintf(stderr, "system {ficheiro de configuração}");
+        exit(1);
     }
-    init_log();
-    read_conf(argv[1]);
+
     initializeSemaphore();
+    init_log();
+
+    read_conf(argv[1]);
+
     shm_ptr = create_shared_memory(sizeof(int));
 
     writelog("SHARED MEMORY INTIALIZED");
@@ -784,6 +793,7 @@ int main(int argc, char *argv[])
             perror("Error creating pipe");
             exit(1);
         }
+ 
     }
 
     worker_t* current = NULL;

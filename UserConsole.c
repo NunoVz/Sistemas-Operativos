@@ -13,6 +13,20 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+
+	if (strlen(argv[1]) < 3 || strlen(argv[1]) > 32){
+		fprintf(stderr, "Invalid Identifier\n");
+
+		exit(1);
+	}
+	for (int i = 0; i < strlen(argv[1]); i++) {   
+		if (!isalnum(argv[1][i]) && argv[1][i] != '_') {   
+
+			fprintf(stderr, "Invalid Identifier\n");
+			exit(1);
+		}
+	}
+
 	bool flag = true;
 	int fd;
 	mkfifo(FIFO_NAME, 0666); // create the named pipe

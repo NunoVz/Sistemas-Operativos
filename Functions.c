@@ -1,9 +1,8 @@
 #include "HeaderFile.h"
 
 // Variaveis Globais
-sem_t *mutex;
 FILE *log_file;
-
+sem_t *mutex;
 
 void initializeSemaphore()
 {
@@ -13,7 +12,7 @@ void initializeSemaphore()
 
 void init_log()
 {
-	if ((log_file = fopen("files//log.txt", "w+")) == NULL)
+	if ((log_file = fopen("files//log.txt", "a+")) == NULL)
 	{
 		puts("[CONSOLE] Failed to open log file");
 		exit(1);
@@ -43,6 +42,7 @@ bool validateSensor(char *inputSensor[]) {   //Método responsável por validar 
 	if (strlen(inputSensor[1]) >= 3 && strlen(inputSensor[1]) <= 32)   //Verifica o tamanho do ID.
 		validateId = true;
 	
+
 	if (strlen(inputSensor[3]) >= 3 && strlen(inputSensor[3]) <= 32)   //Verifica o tamanho da chave.
 		validateKey = true;
 		

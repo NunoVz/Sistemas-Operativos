@@ -17,11 +17,16 @@ int main(int argc, char *argv[])
 		exit(1);
 		
 	}
-	strcpy(systemSensor.sensorId, argv[1]);
-	systemSensor.sendInterval = atoi(argv[2]);
-	strcpy(systemSensor.sensorKey, argv[3]);
-	systemSensor.minValue = atoi(argv[4]);
-	systemSensor.maxValue = atoi(argv[5]);
+	char sensorId[32];
+	int sendInterval;
+	char sensorKey[32];
+	int minValue;
+	int maxValue;
+	strcpy(sensorId, argv[1]);
+	sendInterval = atoi(argv[2]);
+	strcpy(sensorKey, argv[3]);
+	minValue = atoi(argv[4]);
+	maxValue = atoi(argv[5]);
 	int fd;
 	mkfifo(FIFO_NAME, 0666); // create the named pipe
 
@@ -33,16 +38,12 @@ int main(int argc, char *argv[])
 		
         char input[100];
 
-		int value =  systemSensor.minValue + ((float) rand() / RAND_MAX) * (systemSensor.maxValue  - systemSensor.minValue);
-		snprintf(input, sizeof(input), "%s#%s#%d", systemSensor.sensorId, systemSensor.sensorKey, value);
+		int value =  minValue + ((float) rand() / RAND_MAX) * (maxValue  - minValue);
+		snprintf(input, sizeof(input), "%s#%s#%d", sensorId, sensorKey, value);
 		write(fd, input, strlen(input) + 1);
-		sleep(systemSensor.sendInterval);
+		sleep(sendInterval);
 	}
 	close(fd);
-
-	
-
-
 
 
 	return 0;

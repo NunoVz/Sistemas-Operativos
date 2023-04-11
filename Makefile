@@ -7,6 +7,7 @@ USERCONSOLE = UserConsole.c
 TARGET = system
 TARGET2 = sensor
 TARGET3 = user_console
+LOG = ./files/log.txt
 
 all: $(TARGET)
 
@@ -16,6 +17,4 @@ $(TARGET): $(OBJS)
 		$(CC) $(FLAGS) $(USERCONSOLE) $(OBJS) -g -o $(TARGET3) -lrt
 		
 clean:
-				$(RM) $(TARGET)
-				$(RM) $(TARGET2)
-				$(RM) $(TARGET3)
+	$(RM) $(TARGET) $(TARGET2) $(TARGET3) $(LOG)
