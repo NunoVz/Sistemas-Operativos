@@ -5,12 +5,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
-#include <stdio.h>
 #include <time.h>
 #include <unistd.h>
 #include <semaphore.h>
 #include <stdlib.h>
-#include <string.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -19,23 +17,8 @@
 #include <sys/shm.h>
 #include <sys/wait.h>
 #include <pthread.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
 #include <sys/sem.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <mqueue.h>
-
 
 #define MAX_MSG_SIZE 256
 #define MAX_MSG_NUM 10
@@ -56,8 +39,7 @@ int maxkeys;
 int maxsensors;
 int maxalerts;
 
-typedef struct something
-{
+typedef struct something {
 	char sensorId[32];
 	int sendInterval;
 	char sensorKey[32];
@@ -67,8 +49,7 @@ typedef struct something
 
 something systemSensor; // Inicialização da estrutura sensor.
 
-typedef struct keyStats
-{
+typedef struct keyStats {
 	char key[32];
     int last;
 	int minValue;
@@ -77,22 +58,20 @@ typedef struct keyStats
     int count;
     struct keyStats *next;
 } keyStats;
-typedef struct sensor
-{
+
+typedef struct sensor {
 	char sensorId[32];
     struct sensor *next;
 
  
 } sensor;
-typedef struct alertStruct
-{
+
+typedef struct alertStruct {
 	char id[32];
 	char key[32];
 	int minValue;
 	int maxValue;
     struct alertStruct *next;
-
- 
 } alertStruct;
 
 

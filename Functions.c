@@ -36,20 +36,25 @@ void writelog(char *message)
 	sem_post(mutex);
 }
 
-bool validateSensor(char *inputSensor[])
-{ // Método responsável por validar os inputs do Sensor.
+bool validateSensor(char *inputSensor[]) {   //Método responsável por validar os inputs do Sensor.
 	bool validateId = false;
 	bool validateKey = false;
 
-	if (strlen(inputSensor[1]) >= 3 && strlen(inputSensor[1]) <= 32)
+	if (strlen(inputSensor[1]) >= 3 && strlen(inputSensor[1]) <= 32)   //Verifica o tamanho do ID.
 		validateId = true;
-
-	if (strlen(inputSensor[3]) >= 3 && strlen(inputSensor[3]) <= 32)
+	
+	if (strlen(inputSensor[3]) >= 3 && strlen(inputSensor[3]) <= 32)   //Verifica o tamanho da chave.
 		validateKey = true;
-
+		
+	for (int i = 0; i < strlen(inputSensor[3]); i++) {   //Verifica se os caracteres da chave são válidos.
+		if (!isalnum(inputSensor[3][i]) && inputSensor[3][i] != '_') {   
+			validateKey = false;
+		}
+	}
+	
 	if (validateId == true && validateKey == true)
 		return true;
-
+		
 	else
 		return false;
 }
@@ -85,5 +90,3 @@ mqd_t create_queue() {
     }
     return mq;
 }
-
-
