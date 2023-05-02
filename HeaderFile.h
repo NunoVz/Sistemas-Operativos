@@ -88,5 +88,13 @@ typedef struct worker {
 
 void initializeSemaphore();
 void printCommands();
+void init_log();
+void writelog(char *message);
+bool validateSensor(char *inputSensor[]);
+void printCommands();
+void add_to_queue(char *message);
+mqd_t create_queue();
+void add_to_queue(char *message);
+char* get_from_queue();
 
 #endif

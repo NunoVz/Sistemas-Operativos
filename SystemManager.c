@@ -243,8 +243,10 @@ int read_conf(char *filename)
     }
     while ((read = getline(&line, &len, config)) != -1)
     {
-        if(strlen(line)==2){
+        if(line_id==5){
+            printf("End of file reached, line:%s\n",line);
             break;
+
         }
         switch (line_id)
         {
@@ -262,6 +264,7 @@ int read_conf(char *filename)
 
         case (1):
             number = atoi(line);
+
             if (number < 1)
             {
                 writelog("[SYSTEM] Number of max workers is too low");
@@ -273,6 +276,7 @@ int read_conf(char *filename)
             break;
         case (2):
             number = atoi(line);
+
             maxkeys = number;
 
             if (number < 1)
@@ -285,6 +289,7 @@ int read_conf(char *filename)
             break;
         case (3):
             number = atoi(line);
+
            if (number < 1)
             {
                 writelog("[SYSTEM] Number of max sensores is too low");
@@ -298,22 +303,23 @@ int read_conf(char *filename)
         
         case (4):
             number = atoi(line);
-            printf("teste: %s   tes", line);
-            fflush(stdout);
-           if (number < 0)
-            {
-                writelog("[SYSTEM] Number of max alerts is too low");
 
-                exit(1);
-            }
-           maxalerts= number;
+            fflush(stdout);
+            if (number < 0)
+                {
+                    writelog("[SYSTEM] Number of max alerts is too low");
+
+                    exit(1);
+                }
+            maxalerts= number;
             line_id++;
 
            break;
         }
     }
 
-
+    printf("Final: \n Queue Size: %d \n Workers: %d\n,Keys:%d\n,Sensors:%d\n,Alerts:%d\n", queusize,nworkers,maxkeys,maxsensors,maxalerts);
+    fflush(stdout);
     fclose(config);
     if (line)
         free(line);

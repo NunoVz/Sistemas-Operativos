@@ -14,18 +14,12 @@ int main(int argc, char *argv[])
 	}
 
 
-	if (strlen(argv[1]) < 3 || strlen(argv[1]) > 32){
-		fprintf(stderr, "Invalid Identifier\n");
+	int identifier = atoi(argv[1]);
 
-		exit(1);
-	}
-	for (int i = 0; i < strlen(argv[1]); i++) {   
-		if (!isalnum(argv[1][i]) && argv[1][i] != '_') {   
-
-			fprintf(stderr, "Invalid Identifier\n");
-			exit(1);
-		}
-	}
+    if (identifier <= 0) {
+        fprintf(stderr, "O identificador deve ser maior que 0.\n");
+        return -1;
+    }
 
 	bool flag = true;
 	int fd;
