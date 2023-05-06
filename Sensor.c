@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
         char input[100];
 
 		int value =  minValue + ((float) rand() / RAND_MAX) * (maxValue  - minValue);
-		snprintf(input, sizeof(input), "%s#%s#%d", sensorId, sensorKey, value);
+		snprintf(input, sizeof(input), "S %s#%s#%d", sensorId, sensorKey, value);
 		write(fd, input, strlen(input) + 1);
 		sleep(sendInterval);
 	}

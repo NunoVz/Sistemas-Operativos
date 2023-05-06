@@ -21,6 +21,7 @@
 #include <mqueue.h>
 
 #define MAX_MSG_SIZE 256
+#define MAX_OUTPUT 5000
 #define MAX_MSG_NUM 10
 #define QUEUE_NAME "/my_queue"
 #define MAX_MESSAGES 10
@@ -63,6 +64,7 @@ typedef struct alertStruct {
 	char key[32];
 	int minValue;
 	int maxValue;
+    int myuser;
     struct alertStruct *next;
 } alertStruct;
 
@@ -75,9 +77,10 @@ typedef struct {
     int semid;
     int shmid;
     char *shmaddr;
+    
 } SharedMemory;
 
-
+bool worker_available[5];
 SharedMemory* shm_ptr;
 
 typedef struct worker {
