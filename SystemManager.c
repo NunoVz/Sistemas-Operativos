@@ -14,7 +14,8 @@ char (*internal_queue)[100]; //internalqueue
 
 
 
-
+//O meu teclado algumas teclas nao funfam vou deixar aqui caso necessite
+// _ P = p 0
 
 
 int create_sem(int key) {
@@ -58,10 +59,15 @@ void destroy_shm(int shmid) {
 }
 
 SharedMemory* create_shared_memory(int nworkers) {
-    size_t size = sizeof(SharedMemory) + nworkers * sizeof(int); // Allocate space for FAM
+    size_t size = sizeof(SharedMemory) + (nworkers * sizeof(int)) + (maxkeys * sizeof(int)) + (maxsensors * sizeof(int)) + (maxalerts * sizeof(int)); 
     SharedMemory* shmq = malloc(size);
     if (shmq == NULL) {
         perror("Failed to allocate memory for shared memory");
+        exit(EXIT_FAILURE);
+    }
+    shmq->semwork = malloc(nworkers * sizeof(int)); // Dynamically allocate semwork array
+    if (shmq->semwork == NULL) {
+        perror("Failed to allocate memory for semwork");
         exit(EXIT_FAILURE);
     }
     // Initialize the rest of the struct
@@ -693,6 +699,7 @@ void worker(void* arg)
     free(arg); 
     writelog("WORKER UP!");
     printf("WORKER UP %d\n",worker_id);
+    sem_t* alert_sem = sem_open("/alert_sem", O_CREAT, 0666, 0);
 
 
 
@@ -812,26 +819,27 @@ void worker(void* arg)
 
             if (sscanf(msg_copy, "%d %s %s %s %d %d", &consoleid, command, id, key, &min, &max) == 6) {
                 addAlertToList(id,key,min,max,shm_ptr,consoleid);
-                strcpy(my_msg.mtext, "New alert added\n");
+                strncpy(my_msg.mtext, "New alert added\n",MAX_MSG_SIZE - 1);
             } else {
-                strcpy(my_msg.mtext, "Invalid input format for add_alert");
+                strncpy(my_msg.mtext, "Invalid input format for add_alert",MAX_MSG_SIZE - 1);
             }
 
-
-
+            my_msg.mtext[MAX_MSG_SIZE - 1] = '\0'; // make sure to include null terminator
             mq_send(mq, (char *) &my_msg, MAX_MSG_SIZE, 0);
+
         } else if (strcmp(word, "remove_alert") == 0) {
             char command[20], id[20];
             my_msg.mtype = consoleid; 
 
             if (sscanf(msg_copy, "%d %s %s", &consoleid, command, id) == 3) {
                 deleteAlertFromList(id,shm_ptr);
-                strcpy(my_msg.mtext, "Alert Deleted");
+                strncpy(my_msg.mtext, "Alert Deleted", MAX_MSG_SIZE - 1);
 
             } else {
-                strcpy(my_msg.mtext, "Invalid input format for remove alert");
+                strncpy(my_msg.mtext, "Invalid input format for remove alert", MAX_MSG_SIZE - 1);
 
             }
+            my_msg.mtext[MAX_MSG_SIZE - 1] = '\0'; // make sure to include null terminator
             mq_send(mq, (char *) &my_msg, MAX_MSG_SIZE, 0);
 
             printf("Remove alert command detected\n");
@@ -874,8 +882,8 @@ void worker(void* arg)
                 value = strtok(NULL, "#");
 
                 addSensor(shm_ptr,sensor_id);
-                
                 addKeystats(shm_ptr,key,atoi(value));
+                sem_post(alert_sem);
             } else {
                 printf("Invalid command\n");
             }
@@ -901,10 +909,62 @@ void worker(void* arg)
 
 
 }
+
+keyStats* find_key_stats(char* key,SharedMemory *shm) {
+    keyStats* ks = shm_ptr->keystatsList;
+    while (ks != NULL) {
+        if (strcmp(ks->key, key) == 0) {
+            return ks;
+        }
+        ks = ks->next;
+    }
+    return NULL;
+}
+void checkalert(SharedMemory *shm){
+    lock_shared_memory();
+
+    alertStruct* alert = shm->alertList;
+    keyStats* a = shm->keystatsList;
+    int* b = shm->shmid;
+
+    if(alert == NULL){
+        printf("NOT MATCHING!\n");
+        fflush(stdout);
+    }
+    if(a== NULL){
+        printf("KEYSTATS MORREU!\n");
+        fflush(stdout);
+    }
+    if(b== NULL){
+        printf("SHMID MORREU!\n");
+        fflush(stdout);
+    }
+    
+   
+    unlock_shared_memory();
+
+}
+
 void alert()
 {
     writelog("ALERT WATCHER UP!");
-  
+    sem_t* alert_sem = sem_open("/alert_sem", O_CREAT, 0666, 0);
+    
+
+    while (1)
+    {
+        sem_wait(alert_sem);
+        printf("Change detected!\n");
+        fflush(stdout);
+    
+        checkalert(shm_ptr);
+                 
+        // Reset the semaphore to 0
+        sem_trywait(alert_sem);
+        
+        free(alert);
+    }
+    
     
     exit(0);
 
@@ -947,6 +1007,7 @@ int main(int argc, char *argv[])
         }
  
     }
+    create_proc(alert,NULL);
 
 
     for (int i = 0; i < nworkers; i++)
@@ -959,7 +1020,6 @@ int main(int argc, char *argv[])
         create_proc(worker, new_worker);
     }
 
-    create_proc(alert,NULL);
 
 
 

@@ -73,14 +73,14 @@ typedef struct {
     alertStruct *alertList;
     keyStats *keystatsList;
     sensor *sensorList;
-    int semwork[5];
+    int* semwork;
+
     int semid;
     int shmid;
     char *shmaddr;
     
 } SharedMemory;
 
-bool worker_available[5];
 SharedMemory* shm_ptr;
 
 typedef struct worker {
