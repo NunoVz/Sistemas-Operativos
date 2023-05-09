@@ -21,6 +21,7 @@
 #include <mqueue.h>
 
 #define MAX_MSG_SIZE 256
+#define MAX_OUTPUT 5000
 #define MAX_MSG_NUM 10
 #define QUEUE_NAME "/my_queue"
 #define MAX_MESSAGES 10
@@ -63,6 +64,7 @@ typedef struct alertStruct {
 	char key[32];
 	int minValue;
 	int maxValue;
+    int myuser;
     struct alertStruct *next;
 } alertStruct;
 
@@ -71,12 +73,13 @@ typedef struct {
     alertStruct *alertList;
     keyStats *keystatsList;
     sensor *sensorList;
-    int semwork[5];
+    int* semwork;
+
     int semid;
     int shmid;
     char *shmaddr;
+    
 } SharedMemory;
-
 
 SharedMemory* shm_ptr;
 
@@ -88,5 +91,13 @@ typedef struct worker {
 
 void initializeSemaphore();
 void printCommands();
+void init_log();
+void writelog(char *message);
+bool validateSensor(char *inputSensor[]);
+void printCommands();
+void add_to_queue(char *message);
+mqd_t create_queue();
+void add_to_queue(char *message);
+char* get_from_queue();
 
 #endif
