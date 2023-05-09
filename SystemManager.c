@@ -58,8 +58,9 @@ void destroy_shm(int shmid) {
     shmctl(shmid, IPC_RMID, NULL);
 }
 
-SharedMemory* create_shared_memory(int nworkers) {
-    size_t size = sizeof(SharedMemory) + (nworkers * sizeof(int)) + (maxkeys * sizeof(int)) + (maxsensors * sizeof(int)) + (maxalerts * sizeof(int)); 
+SharedMemory* create_shared_memory() {
+    //COnfirmar com o stor se são linked list não faz sentido estar a multilicar
+    size_t size = sizeof(SharedMemory) + (nworkers * sizeof(int)); 
     SharedMemory* shmq = malloc(size);
     if (shmq == NULL) {
         perror("Failed to allocate memory for shared memory");
@@ -70,16 +71,28 @@ SharedMemory* create_shared_memory(int nworkers) {
         perror("Failed to allocate memory for semwork");
         exit(EXIT_FAILURE);
     }
+    printf("Workers: %d\n",nworkers);
+
     // Initialize the rest of the struct
-    shmq->shmid = create_shm(size - sizeof(int) * nworkers); // Subtract FAM size from shared memory size
+    shmq->shmid = create_shm(size - sizeof(int) * nworkers); 
     shmq->shmaddr = attach_shm(shmq->shmid);
     shmq->semid = create_sem(SEM_KEY);
     memset(shmq->shmaddr, 0, size - sizeof(int) * nworkers);
     shmq->keystatsList = NULL;
     shmq->sensorList = NULL;
     shmq->alertList = NULL;
+
+    //Memory Alocation for Sensors/Alerts/Workers
+
+
+
+
+
+
+
+
     // Initialize the FAM
-    for (int i = 0; i < nworkers; i++) {
+    for (int i = 0; i < nworkers; i++){
         int semwork = semget(IPC_PRIVATE, 1, IPC_CREAT | 0600);
         if (semwork < 0) {
             perror("semget() failed");
@@ -104,9 +117,6 @@ SharedMemory* create_shared_memory(int nworkers) {
     return shmq;
 }
 
-
-
-
 void destroy_shared_memory(SharedMemory *shm) {
     destroy_sem(shm->semid);
     detach_shm(shm->shmaddr);
@@ -125,39 +135,46 @@ void unlock_shared_memory() {
 }
 
 
+void add_to_queue(char* message) {
+    sem_wait(&queue_sem); 
 
-
-
-
-
-
-void add_to_queue(char *message)
-{
-    sem_wait(&queue_sem); // wait for access to the internal queue
-
-    // add the message to the back of the queue
-    strncpy(internal_queue[queue_back], message, sizeof(internal_queue[queue_back]));
-    queue_back = (queue_back + 1) % queusize;
-
-    sem_post(&queue_sem); // release access to the internal queue
-}
-
-char* getqueue()
-{
-    char *message = NULL;
-
-    sem_wait(&queue_sem); // wait for access to the internal queue
-
-    // check if the queue is empty
-    if (queue_front != queue_back) {
-        message = internal_queue[queue_front];
-        queue_front = (queue_front + 1) % queusize;
+    if ((queue_back + 1) % queusize == queue_front) {
+        writelog("Message wasnt added because the internal queue size was reached!");
+    } else {
+        strncpy(internal_queue[queue_back], message, sizeof(internal_queue[queue_back]));
+        queue_back = (queue_back + 1) % queusize;
     }
 
-    sem_post(&queue_sem); // release access to the internal queue
+    sem_post(&queue_sem); 
+}
+
+char* getqueue() {
+    char* message = NULL;
+    int i;
+
+    sem_wait(&queue_sem); 
+
+    //We iterate the queue to find a message that is from the user console
+    if (queue_front != queue_back) {
+        for (i = queue_front; i != queue_back; i = (i + 1) % queusize) {
+            if (internal_queue[i][0] > '1' && internal_queue[i][0] <= '9') {
+                message = internal_queue[i];
+                queue_front = (i + 1) % queusize;
+                break;
+            }
+        }
+    //If there is none we get the first sensor command
+        if (message == NULL) {
+            message = internal_queue[queue_front];
+            queue_front = (queue_front + 1) % queusize;
+        }
+    }
+
+    sem_post(&queue_sem); 
 
     return message;
 }
+
 
 
 void *read_thread(void *arg)
@@ -373,6 +390,7 @@ bool getlistsizes(int x){
 int addSensor(SharedMemory *shm, const char *sensorId) {
     // Check if sensorId already exists
     lock_shared_memory(shm);
+
     if(!getlistsizes(2)){
         writelog("Couldnt add new sensor");
     }else{
@@ -390,15 +408,21 @@ int addSensor(SharedMemory *shm, const char *sensorId) {
             s = s->next;
         }
 
+        
         // Sensor doesn't exist, add new sensor to the list
         sensor *newSensor = (sensor *)malloc(sizeof(sensor));
         strcpy(newSensor->sensorId, sensorId);
         newSensor->next = NULL;
         if (s == NULL) {
+            printf("Meti o Sensor no inicio\n");
+            fflush(stdout);
             shm->sensorList = newSensor;
         } else {
+            printf("Meti o Sensor no FIM\n");
+            fflush(stdout);
             s->next = newSensor;
         }
+
     }
     unlock_shared_memory(shm);
 
@@ -414,7 +438,6 @@ int addKeystats(SharedMemory *shm, char *key, int value) {
 
 
     while (k != NULL) {
-        fflush(stdout);
 
         if (k->key != NULL && strcmp(k->key, key) == 0) {
             // Keystats already exists, update values
@@ -439,7 +462,8 @@ int addKeystats(SharedMemory *shm, char *key, int value) {
     }else{
         // Keystats doesn't exist, add new keystats to the list
         keyStats *newKeystats = (keyStats *) malloc(sizeof(keyStats));
-        printf("%d",value);
+        printf("\nKEY->%d | ID ->%s\n",value,key);
+        fflush(stdout);
         strcpy(newKeystats->key, key);
         newKeystats->last = value;
         newKeystats->minValue = value;
@@ -474,7 +498,7 @@ char *generateKeystatsListOutput(SharedMemory *shm) {
 
     while (k != NULL) {
 
-        output_size += snprintf(NULL, 0, "%s\t| %ld\t| %ld\t\t| %ld\t\t| %ld\t| %ld\n",
+        output_size += snprintf(NULL, 0, "%s\t| %d\t| %d\t\t| %d\t\t| %d\t| %d\n",
 
                     k->key, k->last, k->minValue, k->maxValue, k->avg, k->count);
 
@@ -504,7 +528,7 @@ char *generateKeystatsListOutput(SharedMemory *shm) {
 
     k = shm->keystatsList;
     while (k != NULL) {
-        pos += sprintf(output + pos, "%s\t| %ld\t| %ld\t\t| %ld\t\t| %ld\t| %ld\n",
+        pos += sprintf(output + pos, "%s\t| %d\t| %d\t\t| %d\t\t| %d\t| %d\n",
                        k->key, k->last, k->minValue, k->maxValue, k->avg, k->count);
         k = k->next;
     }
@@ -524,7 +548,7 @@ char *generateSensorsOutput(SharedMemory *shm) {
 
     while (s != NULL) {
 
-        output_size += sprintf(NULL,0, "%s\t|\n", s->sensorId);
+        output_size += snprintf(NULL,0, "%s\t|\n", s->sensorId);
 
         s = s->next;
 
@@ -647,7 +671,6 @@ char* generateAlertOutput(SharedMemory *shm) {
     ssize_t output_size = 0;
 
     alertStruct* k = shm->alertList;
-    char tmp[100];
     while (k != NULL) {
 
         output_size += snprintf(NULL, 0, "%s\t| %s\t| %d\t\t| %d\t\t|\n", k->id, k->key, k->minValue, k->maxValue);
@@ -694,8 +717,7 @@ char* generateAlertOutput(SharedMemory *shm) {
 
 void worker(void* arg)
 {
-    worker_t worker = *((worker_t*) arg);
-    int worker_id= worker.i;
+    int worker_id = *((int*) arg);
     free(arg); 
     writelog("WORKER UP!");
     printf("WORKER UP %d\n",worker_id);
@@ -786,7 +808,7 @@ void worker(void* arg)
 
         } else if (strcmp(word, "sensors") == 0) {
             printf("Sensors command detected\n");
-
+            fflush(stdout);
             output = generateSensorsOutput(shm_ptr);
             if (output != NULL) {
                 pos = output;
@@ -883,13 +905,12 @@ void worker(void* arg)
 
                 addSensor(shm_ptr,sensor_id);
                 addKeystats(shm_ptr,key,atoi(value));
-                sem_post(alert_sem);
+                sem_post(alert_sem);  //Warning to Alert Watcher
             } else {
                 printf("Invalid command\n");
             }
         }
         struct sembuf sbt = {0, -1, SEM_UNDO}; // Decrement semaphore value by 1
-        sleep(1);
 
         lock_shared_memory();
         if (semop(shm_ptr->semwork[worker_id], &sbt, 1) < 0) { // Unlock semaphore
@@ -910,22 +931,12 @@ void worker(void* arg)
 
 }
 
-keyStats* find_key_stats(char* key,SharedMemory *shm) {
-    keyStats* ks = shm_ptr->keystatsList;
-    while (ks != NULL) {
-        if (strcmp(ks->key, key) == 0) {
-            return ks;
-        }
-        ks = ks->next;
-    }
-    return NULL;
-}
+
 void checkalert(SharedMemory *shm){
     lock_shared_memory();
 
     alertStruct* alert = shm->alertList;
     keyStats* a = shm->keystatsList;
-    int* b = shm->shmid;
 
     if(alert == NULL){
         printf("NOT MATCHING!\n");
@@ -935,10 +946,7 @@ void checkalert(SharedMemory *shm){
         printf("KEYSTATS MORREU!\n");
         fflush(stdout);
     }
-    if(b== NULL){
-        printf("SHMID MORREU!\n");
-        fflush(stdout);
-    }
+
     
    
     unlock_shared_memory();
@@ -957,12 +965,12 @@ void alert()
         printf("Change detected!\n");
         fflush(stdout);
     
-        checkalert(shm_ptr);
+        printf("%s\n",generateSensorsOutput(shm_ptr));
+                      
                  
         // Reset the semaphore to 0
         sem_trywait(alert_sem);
         
-        free(alert);
     }
     
     
@@ -984,9 +992,9 @@ int main(int argc, char *argv[])
     init_log();
 
     read_conf(argv[1]);
-    printf("NUmber of workers %d\n",nworkers);
+    printf("Number of workers %d\n",nworkers);
 
-    shm_ptr = create_shared_memory(sizeof(int));
+    shm_ptr = create_shared_memory();
     writelog("SHARED MEMORY INTIALIZED");
     worker_pipes = malloc(sizeof(int[nworkers][2]));
     internal_queue = malloc(sizeof(char[queusize][100]));
@@ -1007,19 +1015,16 @@ int main(int argc, char *argv[])
         }
  
     }
-    create_proc(alert,NULL);
 
 
     for (int i = 0; i < nworkers; i++)
     {
-        worker_t* new_worker = (worker_t*) malloc(sizeof(worker_t));
-        new_worker->i = i;
-        new_worker->status = true;
-        new_worker->next = NULL;
-
-        create_proc(worker, new_worker);
+        int* worker_id = malloc(sizeof(int));
+        *worker_id = i;
+        create_proc(worker, worker_id);
     }
 
+    create_proc(alert,NULL);
 
 
 

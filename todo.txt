@@ -1,3 +1,0 @@
-[] - Fazer o Alert Watcher
-[] - rioridade nas mensagens dos users
-[] - Fazer array auxiliar no SensorStats
