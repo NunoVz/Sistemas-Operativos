@@ -49,6 +49,7 @@ typedef struct keyStats {
 	int maxValue;
     int avg;
     int count;
+    bool verified;
     struct keyStats *next;
 } keyStats;
 
@@ -70,18 +71,21 @@ typedef struct alertStruct {
 
 
 typedef struct {
-    alertStruct *alertList;
-    keyStats *keystatsList;
-    sensor *sensorList;
     int* semwork;
-
     int semid;
     int shmid;
     char *shmaddr;
-    
+    int contKey;
+    int contSen;
+    int contAlert;
+    alertStruct *alertList;
+    keyStats *keystatsList;
+    sensor *sensorList;
 } SharedMemory;
 
+
 SharedMemory* shm_ptr;
+int *shmids;
 
 typedef struct worker {
     int i;

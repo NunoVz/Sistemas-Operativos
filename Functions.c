@@ -87,3 +87,4 @@ mqd_t create_queue() {
         exit(1);
     }
     return mq;
+}
